@@ -1,62 +1,54 @@
-const fruits = require('../fruits.json')
+const db = require('../database/db')
 //OOP - object oriented programming. use class to copy this blueprint to all the other fruits available
 class Fruit {
-    constructor (fruit) {
+    constructor (fruit) {           
+        this.id = fruit.id;   
+        this.name = fruit.fruit_name;
         this.genus = fruit.genus;
-        this.name = fruit.name;
-        this.id = fruit.id;
         this.family = fruit.family;
-        this.order = fruit.order;
+        this.order = fruit.fruit_order;
         this.nutritions = fruit.nutritions
     }
-    static showAll(){
-        return fruits.map(q => new Fruit(q))
+    //grab through fruits map through and send all of them
+    static async showAll(){
+        const response = await db.query('SELECT * FROM fruits ORDER BY fruit_name;')
+        return response.rows.map(fruit => new Fruit(fruit))
     }
-    static show(name){
-        const fruit = fruits.find((fruit) => fruit.name.toLowerCase() == name)
-        if (fruit){
-            return new Fruit (fruit)
-        } else {
+    //go through specific fruits and show just 1 fruit, then check if its lowercase. avoids SQL injection
+    static async show(name){
+        const response = await db.query('SELECT * FROM fruits WHERE LOWER(fruit_name) = $1;', [name])
+        if (response.rows.length != 1){
             throw 'The fruit does not exist'
+        } else {
+            return new Fruit (response.rows[0])
         }
     }
 
-    static create(data){
-        const newFruit = data
+    static async create(data){
         if (!data.name){
             throw 'A fruit needs a name'
             //e.g. if only genus is listed
         }
-        const fruit = fruits.find((fruit)=> fruit.name.toLowerCase() == data.name.toLowerCase())
-        if(fruit){
+        const existing = await db.query('SELECT * FROM fruits WHERE LOWER(fruit_name) = $1;', [data.name.toLowerCase()])
+        if(existing.rows.length>0){
             throw 'The fruit already exists'
-        } else {
-        newFruit['id'] = Math.max (...fruits.map(fruit => fruit.id)) + 1
-        fruits.push(newFruit)
-        return new Fruit(newFruit)
-        }
+        } 
+        const response = await db.query('INSERT INTO fruits (fruit_name, genus, family, fruit_order, nutritions) VALUES ($1, $2, $3, $4, $5) RETURNING *;', [data.name, data.genus, data.family, data.order, data.nutritions]) //returns for us not the user, [from constructor part where it says this.order, this.family and etc]
+        return new Fruit (response.rows[0])
     }
-    update(data){
-        const updateFruit = fruits.find(fruit => fruit.name.toLowerCase() == this.name.toLowerCase())
-        if (updateFruit){
-            if (data.name) updateFruit.name = data.name
-            if (data.family) updateFruit.family = data.family
-            return new Fruit(updateFruit)
-        } else {
-            throw 'Fruit not found'
-        }
+    async update(data){
+        const name = data.name || this.name
+        const family = data.family || this.family
+
+        const response = await db.query('UPDATE fruits SET fruit_name = $1, family = $2 WHERE id = $3 RETURNING *;', [name, family, this.id])
+        return new Fruit(response.rows[0])
     }
-    destroy () {
-        const deletedFruit = fruits.find(fruit => fruit.name.toLowerCase() == this.name.toLowerCase())
-        if (deletedFruit) {
-            const index = fruits.indexOf(deletedFruit)
-            fruits.splice(index, 1) 
-        } else {
-            throw 'Fruit not found'
-        }
+
+    async destroy () {
+        await db.query('DELETE FROM fruits WHERE id = $1;', [this.id])
     }
 }
-
+//we use placeholders to prevent injecting immediately
 module.exports = Fruit
 
 
